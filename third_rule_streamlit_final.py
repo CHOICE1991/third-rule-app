@@ -1,133 +1,79 @@
-# streamlit_app.py
 import streamlit as st
 import yfinance as yf
 import pandas as pd
 import mplfinance as mpf
 import matplotlib.pyplot as plt
 
-# 設定樣式
-st.set_page_config(page_title="三分之一法股價工具", layout="wide")
+# 頁面設定
+st.set_page_config(page_title="三分之一法股價分析工具", layout="wide")
 st.title("📈 三分之一法股價分析工具")
 
-# 股票代碼輸入
-stock_id = st.text_input("請輸入股票代碼（如 2330）")
+# 輸入股票代碼
+stock_symbol = st.text_input("請輸入股票代碼（如 2330 ）", value="2330")
 
-# 計算三分之一法
-@st.cache_data
-def calculate_third_rule(price):
-    base = round(price * 0.07 / 3)
-    return {
-        "目前股價 💰": price,
-        "基礎數值（四捨五入）": base,
-        "<div style="color:red;">⬆ 往上 10%": round(price + 4 * base, 1),
-        "⬆ 往上 7%": round(price + 3 * base, 1),
-        "⬆ 往上 2/3": round(price + 2 * base, 1),
-        "⬆ 往上 1/3": round(price + base, 1),
-        "<div style="color:green;">⬇ 往下 1/3": round(price - base, 1),
-        "⬇ 往下 2/3": round(price - 2 * base, 1),
-        "⬇ 往下 7%": round(price - 3 * base, 1),
-        "⬇ 往下 10%": round(price - 4 * base, 1),
-    }
+if stock_symbol:
+    stock_symbol = stock_symbol.strip()
+    ticker_symbol = f"{stock_symbol}.TW"
+    ticker = yf.Ticker(ticker_symbol)
+    hist = ticker.history(period="90d")
 
-# 加入 EMA 計算
-@st.cache_data
-def add_ema(data, spans):
-    for span in spans:
-        data[f"EMA{span}"] = data['Close'].ewm(span=span).mean()
-    return data
+    if hist.empty:
+        st.error("找不到此股票資料，請確認代碼正確。")
+    else:
+        stock_info = ticker.info
+        stock_name = stock_info.get("longName", "N/A").upper()
 
-# 三日均價
-def calculate_recent_avg(data):
-    results = []
-    for i in range(1, 4):
-        row = data.iloc[-i]
-        avg = round((row['Open'] + row['High'] + row['Low'] + row['Close']) / 4, 2)
-        results.append((row.name.strftime("%Y-%m-%d"), avg))
-    return results
+        # 取得最新股價與均線
+        price = hist["Close"].iloc[-1]
+        base = round(price * 0.07 / 3)
+        avg_price_today = round((hist["High"].iloc[-1] + hist["Low"].iloc[-1] + hist["Close"].iloc[-1]) / 3, 1)
+        avg_1d = round((hist["High"].iloc[-2] + hist["Low"].iloc[-2] + hist["Close"].iloc[-2]) / 3, 1)
+        avg_2d = round((hist["High"].iloc[-3] + hist["Low"].iloc[-3] + hist["Close"].iloc[-3]) / 3, 1)
 
-# 判斷金叉死叉
-def detect_crossovers(data):
-    events = []
-    for i in range(1, len(data)):
-        if data['EMA6'].iloc[i-1] < data['EMA30'].iloc[i-1] and data['EMA6'].iloc[i] > data['EMA30'].iloc[i]:
-            events.append((data.index[i], data['Close'].iloc[i], '金叉'))
-        elif data['EMA6'].iloc[i-1] > data['EMA30'].iloc[i-1] and data['EMA6'].iloc[i] < data['EMA30'].iloc[i]:
-            events.append((data.index[i], data['Close'].iloc[i], '死叉'))
-    return events
+        # 顯示標題與漲跌資料
+        st.subheader(f"📊 {stock_symbol} - {stock_name} 最新分析")
 
-# 畫圖
-def plot_chart(data, spans):
-    data = add_ema(data.copy(), spans)
-    cross = detect_crossovers(data)
-    apds = [mpf.make_addplot(data[f"EMA{span}"], color=color, width=1, label=f"EMA{span}")
-            for span, color in zip(spans, ['orange','cyan','purple','limegreen','pink','blue'])]
-    mc = mpf.make_marketcolors(up='red', down='green')
-    style = mpf.make_mpf_style(marketcolors=mc)
-    fig, axes = mpf.plot(
-        data,
-        type='candle',
-        addplot=apds,
-        style=style,
-        returnfig=True,
-        volume=True,
-        ylabel='價格',
-        figratio=(10,6),
-        datetime_format='%m-%d'
-    )
-    for dt, price, label in cross[-3:]:
-        axes[0].annotate(label, xy=(dt, price), xytext=(dt, price*1.03),
-                         textcoords="data", ha="center",
-                         bbox=dict(facecolor='white', edgecolor='red'),
-                         arrowprops=dict(facecolor='red', arrowstyle='->'))
-    st.pyplot(fig)
+        # 計算目標區間
+        up_10 = round(price + 4 * base, 1)
+        up_7 = round(price + 3 * base, 1)
+        up_2_3 = round(price + 2 * base, 1)
+        up_1_3 = round(price + base, 1)
 
-# 主邏輯
-if stock_id:
-    try:
-        ticker = yf.Ticker(f"{stock_id}.TW")
-        daily = ticker.history(period="7d", interval="1d")
-        if daily.empty:
-            ticker = yf.Ticker(f"{stock_id}.TWO")
-            daily = ticker.history(period="7d", interval="1d")
-        name = ticker.info.get("shortName", "未知公司")
-
-        st.subheader(f"📊 {stock_id} - {name} 最新分析")
-        price = round(daily['Close'].iloc[-1], 1)
-        result = calculate_third_rule(price)
+        down_1_3 = round(price - base, 1)
+        down_2_3 = round(price - 2 * base, 1)
+        down_7 = round(price - 3 * base, 1)
+        down_10 = round(price - 4 * base, 1)
 
         col1, col2 = st.columns(2)
         with col1:
-            for k in ["⬆ 往上 10%", "⬆ 往上 7%", "⬆ 往上 2/3", "⬆ 往上 1/3"]:
-                st.markdown(f"🟩 **{k}**：{result[k]}</div></div>")
+            st.markdown(f"<span style='color:green;'>⬆ 往上 10%：{up_10}</span>", unsafe_allow_html=True)
+            st.markdown(f"<span style='color:green;'>⬆ 往上 7%：{up_7}</span>", unsafe_allow_html=True)
+            st.markdown(f"<span style='color:green;'>⬆ 往上 2/3：{up_2_3}</span>", unsafe_allow_html=True)
+            st.markdown(f"<span style='color:green;'>⬆ 往上 1/3：{up_1_3}</span>", unsafe_allow_html=True)
         with col2:
-            for k in ["<div style="color:green;">⬇ 往下 1/3", "⬇ 往下 2/3", "⬇ 往下 7%", "⬇ 往下 10%"]:
-                st.markdown(f"🟥 **{k}**：{result[k]}</div>")
+            st.markdown(f"<span style='color:red;'>⬇ 往下 1/3：{down_1_3}</span>", unsafe_allow_html=True)
+            st.markdown(f"<span style='color:red;'>⬇ 往下 2/3：{down_2_3}</span>", unsafe_allow_html=True)
+            st.markdown(f"<span style='color:red;'>⬇ 往下 7%：{down_7}</span>", unsafe_allow_html=True)
+            st.markdown(f"<span style='color:red;'>⬇ 往下 10%：{down_10}</span>", unsafe_allow_html=True)
 
-        st.info(f"目前股價 💰：{price} 元\n\n基礎數值：{result['基礎數值（四捨五入）']} 元")
+        # 顯示目前價格與基礎數值
+        st.info(f"目前股價 💰：{price} 元\n\n基礎數值：{base} 元\n\n三日均價：[ 今天：{avg_price_today}，昨天：{avg_1d}，前天：{avg_2d} ]")
 
-        st.markdown("---")
-        spans = [6,12,30,60,90,180]
-        plot_chart(daily, spans)
+        # 計算與繪製K線圖與EMA
+        hist["EMA6"] = hist["Close"].ewm(span=6, adjust=False).mean()
+        hist["EMA12"] = hist["Close"].ewm(span=12, adjust=False).mean()
+        hist["EMA30"] = hist["Close"].ewm(span=30, adjust=False).mean()
+        hist["EMA60"] = hist["Close"].ewm(span=60, adjust=False).mean()
 
-        avg3 = calculate_recent_avg(daily)
-        st.markdown("**📆 三日均價（開高低收平均）：**")
-        for d, v in avg3:
-            st.write(f"{d}：{v} 元")
+        mc = mpf.make_marketcolors(up="red", down="green", inherit=True)
+        s  = mpf.make_mpf_style(marketcolors=mc)
 
-    except Exception as e:
-        st.error(f"錯誤：{e}")
-    # 繪圖區
-    st.subheader("📉 技術分析圖表")
-    plt.figure(figsize=(12, 6))
-    plt.plot(df['Close'], label='收盤價', color='black')
-
-    for col, color in zip(['EMA6', 'EMA12', 'EMA30', 'EMA60'], ['orange', 'gray', 'purple', 'green']):
-        plt.plot(df[col], label=col, color=color)
-
-    plt.axhline(current_price, color='blue', linestyle='--', label='目前股價')
-    plt.title(f"{stock_id} - {name} 技術圖")
-    plt.xlabel("日期")
-    plt.ylabel("價格")
-    plt.legend()
-    st.pyplot(plt)
-
+        fig, axlist = mpf.plot(
+            hist[-60:], type='candle',
+            style=s,
+            mav=(6, 12, 30, 60),
+            volume=True,
+            returnfig=True,
+            title=f"{stock_symbol} - K 線圖與均線分析"
+        )
+        st.pyplot(fig)
