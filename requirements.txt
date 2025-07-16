@@ -2,5 +2,6 @@ streamlit
 pyGoodInfo
 mplfinance
 pandas
-requests
+matplotlib
 beautifulsoup4
+requests
