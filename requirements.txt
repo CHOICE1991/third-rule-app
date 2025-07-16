@@ -1,7 +1,5 @@
 streamlit
-pygoodinfo
+yfinance
 mplfinance
 pandas
 matplotlib
-beautifulsoup4
-requests
