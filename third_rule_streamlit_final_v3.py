@@ -24,7 +24,7 @@ def calculate_third_rule(price):
         "⬆ 往上 7%": round(price + 3 * base, 1),
         "⬆ 往上 2/3": round(price + 2 * base, 1),
         "⬆ 往上 1/3": round(price + base, 1),
-        "────────────" "────────────",
+        "────────────""────────────",
         "⬇ 往下 1/3": round(price - base, 1),
         "⬇ 往下 2/3": round(price - 2 * base, 1),
         "⬇ 往下 7%": round(price - 3 * base, 1),
