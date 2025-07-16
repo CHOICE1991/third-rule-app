@@ -1,5 +1,5 @@
 streamlit
-pyGoodInfo
+pygoodinfo
 mplfinance
 pandas
 matplotlib
